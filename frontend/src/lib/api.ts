@@ -13,6 +13,34 @@ import {
   UpdateEventRequest,
 } from "@/domain/domain";
 
+// Helper to format a Date into a LocalDateTime-style string without timezone offset
+const pad = (n: number) => n.toString().padStart(2, "0");
+const toLocalDateTimeString = (d: Date) => {
+  // Use UTC getters because the app constructs UTC-based Date objects for selected date/time.
+  // This will produce a string like "2025-11-24T15:30:00" (no trailing Z).
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(
+    d.getUTCDate(),
+  )}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(
+    d.getUTCSeconds(),
+  )}`;
+};
+
+// Convert CreateEventRequest / UpdateEventRequest instances (which may contain Date objects)
+// into a plain object where Date fields are serialized into yyyy-MM-dd'T'HH:mm:ss (LocalDateTime)
+export const serializeEventRequest = (
+  req: CreateEventRequest | UpdateEventRequest,
+): Record<string, unknown> => {
+  const clone: Record<string, unknown> = { ...req } as Record<string, unknown>;
+
+  if (req.start instanceof Date) clone.start = toLocalDateTimeString(req.start);
+  if (req.end instanceof Date) clone.end = toLocalDateTimeString(req.end);
+  if (req.salesStart instanceof Date) clone.salesStart = toLocalDateTimeString(req.salesStart);
+  if (req.salesEnd instanceof Date) clone.salesEnd = toLocalDateTimeString(req.salesEnd);
+
+  // ticketTypes and other fields remain untouched
+  return clone;
+};
+
 export const createEvent = async (
   accessToken: string,
   request: CreateEventRequest,
@@ -23,7 +51,7 @@ export const createEvent = async (
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(serializeEventRequest(request)),
   });
 
   const responseBody = await response.json();
@@ -49,7 +77,7 @@ export const updateEvent = async (
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(serializeEventRequest(request)),
   });
 
   const responseBody = await response.json();

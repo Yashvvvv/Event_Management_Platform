@@ -36,7 +36,7 @@ import {
   UpdateEventRequest,
   UpdateTicketTypeRequest,
 } from "@/domain/domain";
-import { createEvent, getEvent, updateEvent } from "@/lib/api";
+import { createEvent, getEvent, updateEvent, serializeEventRequest } from "@/lib/api";
 import { format } from "date-fns";
 import {
   AlertCircle,
@@ -93,11 +93,16 @@ const DateTimeSelect: React.FC<DateTimeSelectProperties> = ({
                   const displayedMonth = selectedDate.getMonth();
                   const displayedDay = selectedDate.getDate();
 
+                  // Create a local date at midnight for the selected day (do not use UTC)
                   const correctedDate = new Date(
-                    Date.UTC(displayedYear, displayedMonth, displayedDay),
+                    displayedYear,
+                    displayedMonth,
+                    displayedDay,
                   );
 
                   setDate(correctedDate);
+                  // If user selected a date, enable the control so it will be included in payload
+                  setEnabled(true);
                 }}
                 className="rounded-md border shadow"
               />
@@ -109,7 +114,7 @@ const DateTimeSelect: React.FC<DateTimeSelectProperties> = ({
               type="time"
               className="w-[90px] bg-gray-900 text-white border-gray-700 border [&::-webkit-calendar-picker-indicator]:invert"
               value={time}
-              onChange={(e) => setTime(e.target.value)}
+              onChange={(e) => { setTime(e.target.value); setEnabled(true); }}
             />
           </div>
         </div>
@@ -194,20 +199,20 @@ const DashboardManageEventPage: React.FC = () => {
         setEventData({
           id: event.id,
           name: event.name,
-          startDate: event.start,
+          startDate: event.start ? new Date(event.start) : undefined,
           startTime: event.start
             ? formatTimeFromDate(new Date(event.start))
             : undefined,
-          endDate: event.end,
+          endDate: event.end ? new Date(event.end) : undefined,
           endTime: event.end
             ? formatTimeFromDate(new Date(event.end))
             : undefined,
           venueDetails: event.venue,
-          salesStartDate: event.salesStart,
+          salesStartDate: event.salesStart ? new Date(event.salesStart) : undefined,
           salesStartTime: event.salesStart
             ? formatTimeFromDate(new Date(event.salesStart))
             : undefined,
-          salesEndDate: event.salesEnd,
+          salesEndDate: event.salesEnd ? new Date(event.salesEnd) : undefined,
           salesEndTime: event.salesEnd
             ? formatTimeFromDate(new Date(event.salesEnd))
             : undefined,
@@ -227,7 +232,7 @@ const DashboardManageEventPage: React.FC = () => {
       };
       fetchEvent();
     }
-  }, [id, user]);
+  }, [id, user, isLoading]);
 
   const formatTimeFromDate = (date: Date): string => {
     const hours = date.getHours().toString().padStart(2, "0");
@@ -277,30 +282,33 @@ const DashboardManageEventPage: React.FC = () => {
       id: id,
       name: eventData.name,
       start:
-        eventData.startDate && eventData.startTime
-          ? combineDateTime(eventData.startDate, eventData.startTime)
+        eventDateEnabled && eventData.startDate
+          ? combineDateTime(eventData.startDate, eventData.startTime ?? "00:00")
           : undefined,
       end:
-        eventData.endDate && eventData.endTime
-          ? combineDateTime(eventData.endDate, eventData.endTime)
+        eventDateEnabled && eventData.endDate
+          ? combineDateTime(eventData.endDate, eventData.endTime ?? "00:00")
           : undefined,
       venue: eventData.venueDetails,
       salesStart:
-        eventData.salesStartDate && eventData.salesStartTime
-          ? combineDateTime(eventData.salesStartDate, eventData.salesStartTime)
+        eventSalesDateEnabled && eventData.salesStartDate
+          ? combineDateTime(eventData.salesStartDate, eventData.salesStartTime ?? "00:00")
           : undefined,
       salesEnd:
-        eventData.salesEndDate && eventData.salesEndTime
-          ? combineDateTime(eventData.salesEndDate, eventData.salesEndTime)
+        eventSalesDateEnabled && eventData.salesEndDate
+          ? combineDateTime(eventData.salesEndDate, eventData.salesEndTime ?? "00:00")
           : undefined,
       status: eventData.status,
       ticketTypes: ticketTypes,
     };
 
     try {
-      await updateEvent(accessToken, id, request);
-      navigate("/dashboard/events");
-    } catch (err) {
+      // debug: log serialized payload to console so we can inspect what will be sent
+      // eslint-disable-next-line no-console
+      console.log("Serialized update payload:", serializeEventRequest(request));
+       await updateEvent(accessToken, id, request);
+       navigate("/dashboard/events");
+     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
       } else if (typeof err === "string") {
@@ -326,21 +334,21 @@ const DashboardManageEventPage: React.FC = () => {
     const request: CreateEventRequest = {
       name: eventData.name,
       start:
-        eventData.startDate && eventData.startTime
-          ? combineDateTime(eventData.startDate, eventData.startTime)
+        eventDateEnabled && eventData.startDate
+          ? combineDateTime(eventData.startDate, eventData.startTime ?? "00:00")
           : undefined,
       end:
-        eventData.endDate && eventData.endTime
-          ? combineDateTime(eventData.endDate, eventData.endTime)
+        eventDateEnabled && eventData.endDate
+          ? combineDateTime(eventData.endDate, eventData.endTime ?? "00:00")
           : undefined,
       venue: eventData.venueDetails,
       salesStart:
-        eventData.salesStartDate && eventData.salesStartTime
-          ? combineDateTime(eventData.salesStartDate, eventData.salesStartTime)
+        eventSalesDateEnabled && eventData.salesStartDate
+          ? combineDateTime(eventData.salesStartDate, eventData.salesStartTime ?? "00:00")
           : undefined,
       salesEnd:
-        eventData.salesEndDate && eventData.salesEndTime
-          ? combineDateTime(eventData.salesEndDate, eventData.salesEndTime)
+        eventSalesDateEnabled && eventData.salesEndDate
+          ? combineDateTime(eventData.salesEndDate, eventData.salesEndTime ?? "00:00")
           : undefined,
       status: eventData.status,
       ticketTypes: ticketTypes,
