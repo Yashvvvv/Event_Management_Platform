@@ -5,6 +5,7 @@ import { Calendar, DollarSign, MapPin, Tag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { useParams } from "react-router";
+import NavBar from "@/components/nav-bar";
 
 const DashboardViewTicketPage: React.FC = () => {
   const [ticket, setTicket] = useState<TicketDetails | undefined>();
@@ -65,9 +66,11 @@ const DashboardViewTicketPage: React.FC = () => {
   }
 
   return (
-    <div className="bg-black min-h-screen text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="relative bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 rounded-3xl p-8 shadow-2xl">
+    <div className="bg-black min-h-screen text-white">
+      <NavBar />
+      <div className="flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="relative bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 rounded-3xl p-8 shadow-2xl">
           {/* Status */}
           <div className="bg-black/30 backdrop-blur-sm px-3 py-1 rounded-full mb-8 text-center">
             <span
@@ -144,6 +147,7 @@ const DashboardViewTicketPage: React.FC = () => {
             <p className="text-purple-200 text-sm font-mono">{ticket.id}</p>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

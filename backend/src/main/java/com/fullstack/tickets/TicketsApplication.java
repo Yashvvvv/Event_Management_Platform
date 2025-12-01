@@ -1,0 +1,15 @@
+package com.fullstack.tickets;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class TicketsApplication {
+
+  public static void main(String[] args) {
+    // Ensure Java reports a Postgres-accepted timezone id
+    System.setProperty("user.timezone", "UTC");
+    SpringApplication.run(TicketsApplication.class, args);
+  }
+
+}

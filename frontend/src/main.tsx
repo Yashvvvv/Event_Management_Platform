@@ -8,6 +8,7 @@ import OrganizersLandingPage from "./pages/organizers-landing-page.tsx";
 import DashboardManageEventPage from "./pages/dashboard-manage-event-page.tsx";
 import LoginPage from "./pages/login-page.tsx";
 import ProtectedRoute from "./components/protected-route.tsx";
+import RoleProtectedRoute from "./components/role-protected-route.tsx";
 import CallbackPage from "./pages/callback-page.tsx";
 import DashboardListEventsPage from "./pages/dashboard-list-events-page.tsx";
 import PublishedEventsPage from "./pages/published-events-page.tsx";
@@ -37,9 +38,9 @@ const router = createBrowserRouter([
   {
     path: "/events/:eventId/purchase/:ticketTypeId",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ATTENDEE"]}>
         <PurchaseTicketPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
@@ -57,49 +58,49 @@ const router = createBrowserRouter([
   {
     path: "/dashboard/events",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ORGANIZER"]}>
         <DashboardListEventsPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: "/dashboard/tickets",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ATTENDEE"]}>
         <DashboardListTickets />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: "/dashboard/tickets/:id",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ATTENDEE"]}>
         <DashboardViewTicketPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: "/dashboard/validate-qr",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["STAFF"]}>
         <DashboardValidateQrPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: "/dashboard/events/create",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ORGANIZER"]}>
         <DashboardManageEventPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
   {
     path: "/dashboard/events/update/:id",
     element: (
-      <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ORGANIZER"]}>
         <DashboardManageEventPage />
-      </ProtectedRoute>
+      </RoleProtectedRoute>
     ),
   },
 ]);

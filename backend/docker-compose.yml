@@ -3,6 +3,7 @@ services:
   db:
     # Using the latest PostgreSQL image
     image: postgres:latest
+    # map container 5432 to host 5433 to avoid collision with any local Postgres on the host
     ports:
       - "5433:5432"
     restart: always

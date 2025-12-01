@@ -6,6 +6,7 @@ import { CheckCircle, CreditCard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { useNavigate, useParams } from "react-router";
+import NavBar from "@/components/nav-bar";
 
 const PurchaseTicketPage: React.FC = () => {
   const { eventId, ticketTypeId } = useParams();
@@ -45,18 +46,21 @@ const PurchaseTicketPage: React.FC = () => {
 
   if (isPurchaseSuccess) {
     return (
-      <div className="bg-black min-h-screen text-white flex items-center">
-        <div className="max-w-md mx-auto p-8 text-center">
-          <div className="bg-white p-8 rounded-lg border border-gray-200 shadow-sm text-black">
-            <div className="space-y-2">
-              <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-              <h2 className="text-2xl font-bold text-green-600">Thank you!</h2>
-              <p className="text-gray-600">
-                Your ticket purchase was successful.
-              </p>
-              <p className="text-gray-600 text-sm">
-                Redirecting to home page in a few seconds...
-              </p>
+      <div className="bg-black min-h-screen text-white">
+        <NavBar />
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+          <div className="max-w-md mx-auto p-8 text-center">
+            <div className="bg-white p-8 rounded-lg border border-gray-200 shadow-sm text-black">
+              <div className="space-y-2">
+                <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
+                <h2 className="text-2xl font-bold text-green-600">Thank you!</h2>
+                <p className="text-gray-600">
+                  Your ticket purchase was successful.
+                </p>
+                <p className="text-gray-600 text-sm">
+                  Redirecting to home page in a few seconds...
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -66,6 +70,7 @@ const PurchaseTicketPage: React.FC = () => {
 
   return (
     <div className="bg-black min-h-screen text-white">
+      <NavBar />
       <div className="max-w-md mx-auto py-20">
         <div className="bg-white border-gray-300 shadow-sm border rounded-lg space-y-4 p-6">
           {error && (

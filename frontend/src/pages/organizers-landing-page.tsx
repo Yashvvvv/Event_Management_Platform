@@ -1,10 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { useAuth } from "react-oidc-context";
 import { useNavigate } from "react-router";
+import NavBar from "@/components/nav-bar";
 
 const OrganizersLandingPage: React.FC = () => {
-  const { isAuthenticated, isLoading, signinRedirect, signoutRedirect } =
-    useAuth();
+  const { isLoading } = useAuth();
 
   const navigate = useNavigate();
 
@@ -14,31 +14,7 @@ const OrganizersLandingPage: React.FC = () => {
 
   return (
     <div className="bg-black min-h-screen text-white">
-      {/* Nav */}
-      <div className="flex justify-end p-4 container mx-auto">
-        {isAuthenticated ? (
-          <div className="flex gap-4">
-            <Button
-              onClick={() => navigate("/dashboard/events")}
-              className="cursor-pointer"
-            >
-              Dashboard
-            </Button>
-            <Button
-              className="cursor-pointer"
-              onClick={() => signoutRedirect()}
-            >
-              Log out
-            </Button>
-          </div>
-        ) : (
-          <div className="flex gap-4">
-            <Button className="cursor-pointer" onClick={() => signinRedirect()}>
-              Log in
-            </Button>
-          </div>
-        )}
-      </div>
+      <NavBar />
 
       <main className="container mx-auto px-4 py-16">
         <div className="grid grid-cols-2 gap-8 max-w-5xl mx-auto">

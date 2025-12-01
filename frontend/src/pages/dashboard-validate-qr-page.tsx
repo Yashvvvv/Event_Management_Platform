@@ -10,6 +10,7 @@ import { AlertCircle, Check, X } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { validateTicket } from "@/lib/api";
 import { useAuth } from "react-oidc-context";
+import NavBar from "@/components/nav-bar";
 
 const DashboardValidateQrPage: React.FC = () => {
   const { isLoading, user } = useAuth();
@@ -53,23 +54,20 @@ const DashboardValidateQrPage: React.FC = () => {
   };
 
   if (isLoading || !user?.access_token) {
-    <p>Loading...</p>;
+    return <p>Loading...</p>;
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex justify-center items-center">
-      <div
-        className="border border-gray-400 max-w-sm
-w-full p-4"
-      >
+    <div className="min-h-screen bg-black text-white">
+      <NavBar />
+      <div className="flex justify-center items-center py-8">
+        <div className="border border-gray-400 max-w-sm w-full p-4">
         {error && (
-          <div className="min-h-screen bg-black text-white">
-            <Alert variant="destructive" className="bg-gray-900 border-red-700">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          </div>
+          <Alert variant="destructive" className="bg-gray-900 border-red-700 mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
         {/* Scanner Viewport */}
         <div className="rounded-lg overflow-hidden mx-auto mb-8 relative">
@@ -135,6 +133,7 @@ w-full p-4"
         >
           Reset
         </Button>
+      </div>
       </div>
     </div>
   );

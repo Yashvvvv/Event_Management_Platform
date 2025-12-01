@@ -9,7 +9,7 @@
     <version>3.4.4</version>
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
-  <groupId>com.devtiro</groupId>
+  <groupId>com.fullstack</groupId>
   <artifactId>tickets</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   <name>tickets</name>
@@ -127,6 +127,15 @@
               <version>0.2.0</version>
             </path>
           </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <!-- Ensure tests run with the same timezone as the main application -->
+          <argLine>-Duser.timezone=UTC</argLine>
         </configuration>
       </plugin>
       <plugin>
