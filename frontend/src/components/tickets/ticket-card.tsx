@@ -38,10 +38,21 @@ const statusConfig: Record<TicketStatus, { label: string; className: string; ico
 }
 
 export const TicketCard: React.FC<TicketCardProps> = ({ ticket, index = 0 }) => {
-  const status = statusConfig[ticket.status]
-  const isPast = ticket.status === TicketStatus.USED || 
-                 ticket.status === TicketStatus.EXPIRED || 
-                 ticket.status === TicketStatus.CANCELLED
+  // Check if event has ended (for visual display purposes)
+  const eventEnd = ticket.eventEnd ? parseWallClockDate(ticket.eventEnd) : null
+  const isEventEnded = eventEnd ? eventEnd < new Date() : false
+  
+  // Determine the display status:
+  // - If ticket is PURCHASED but event has ended, show as "Expired" visually
+  // - Otherwise, use the actual ticket status
+  const displayStatus = (ticket.status === TicketStatus.PURCHASED && isEventEnded) 
+    ? TicketStatus.EXPIRED 
+    : ticket.status
+  
+  const status = statusConfig[displayStatus]
+  const isPast = displayStatus === TicketStatus.USED || 
+                 displayStatus === TicketStatus.EXPIRED || 
+                 displayStatus === TicketStatus.CANCELLED
 
   return (
     <motion.div

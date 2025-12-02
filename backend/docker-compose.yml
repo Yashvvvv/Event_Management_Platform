@@ -11,6 +11,8 @@ services:
       POSTGRES_PASSWORD: changemeinprod!
       TZ: Asia/Kolkata
       PGTZ: Asia/Kolkata
+    volumes:
+      - postgres-data:/var/lib/postgresql
 
   # Database management interface
   adminer:
@@ -34,4 +36,6 @@ services:
 
 volumes:
   keycloak-data:
+    driver: local
+  postgres-data:
     driver: local

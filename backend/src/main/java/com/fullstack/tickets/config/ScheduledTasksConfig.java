@@ -22,10 +22,10 @@ public class ScheduledTasksConfig {
   private final EventStatusService eventStatusService;
 
   /**
-   * Runs every hour to check for and expire tickets for events that have ended.
+   * Runs every 5 minutes to check for and expire tickets for events that have ended.
    * Also runs 10 seconds after application startup.
    */
-  @Scheduled(fixedRate = 3600000, initialDelay = 10000) // Every hour, 10 seconds after startup
+  @Scheduled(fixedRate = 300000, initialDelay = 10000) // Every 5 minutes, 10 seconds after startup
   public void expireTicketsTask() {
     log.debug("Running scheduled ticket expiration task...");
     try {
@@ -36,11 +36,11 @@ public class ScheduledTasksConfig {
   }
 
   /**
-   * Runs every hour to automatically mark PUBLISHED events as COMPLETED
+   * Runs every 5 minutes to automatically mark PUBLISHED events as COMPLETED
    * when their event_end date has passed.
    * Also runs 10 seconds after application startup.
    */
-  @Scheduled(fixedRate = 3600000, initialDelay = 10000) // Every hour, 10 seconds after startup
+  @Scheduled(fixedRate = 300000, initialDelay = 10000) // Every 5 minutes, 10 seconds after startup
   public void completeEndedEventsTask() {
     log.debug("Running scheduled event completion task...");
     try {

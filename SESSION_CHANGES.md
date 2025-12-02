@@ -18,6 +18,14 @@ This document outlines all the changes, improvements, and implementations made d
 10. [Data Cleanup Operations](#10-data-cleanup-operations)
 11. [JVM Timezone Configuration Fix](#11-jvm-timezone-configuration-fix)
 12. [Null Ticket Availability Fix](#12-null-ticket-availability-fix)
+13. [Automatic Event Completion Feature](#13-automatic-event-completion-feature)
+14. [PostgreSQL Timezone Configuration](#14-postgresql-timezone-configuration)
+15. [Dev Profile Cleanup](#15-dev-profile-cleanup)
+16. [Git Repository Configuration](#16-git-repository-configuration)
+17. [PostgreSQL Persistent Volume Configuration](#17-postgresql-persistent-volume-configuration)
+18. [Scheduled Task Interval Optimization](#18-scheduled-task-interval-optimization)
+19. [Frontend Expired Ticket Display Fix](#19-frontend-expired-ticket-display-fix)
+20. [Future Work / Roadmap](#20-future-work--roadmap)
 
 ---
 
@@ -888,11 +896,78 @@ if(totalAvailable != null && purchasedTickets + 1 > totalAvailable) {
 1. **Duplicate H2 dependency** in `pom.xml` - Causes warning but doesn't affect functionality
 2. **Ticket expiration job** runs hourly - Consider making configurable
 3. **Past tickets** could have a "Download PDF" feature for receipts
-4. **Event completion** could be automated based on end date (similar to ticket expiration)
+4. ~~**Event completion** could be automated based on end date (similar to ticket expiration)~~ ✅ **IMPLEMENTED** (Section 13)
 5. **Ticket Cancellation** - `CANCELLED` status exists but cancellation feature not yet implemented:
    - No cancel ticket API endpoint
    - No cancel button in UI
    - No refund logic or cancellation policy
+
+---
+
+## Files Modified Summary (All Sessions)
+
+### Backend Files
+| File | Change Type |
+|------|-------------|
+| `TicketStatusEnum.java` | Modified |
+| `TicketRepository.java` | Modified |
+| `TicketValidationServiceImpl.java` | Modified |
+| `TicketExpirationService.java` | **NEW** |
+| `ScheduledTasksConfig.java` | **NEW** → Modified |
+| `TicketController.java` | Modified |
+| `SalesPeriodException.java` | **NEW** |
+| `TicketTypeServiceImpl.java` | Modified |
+| `GlobalExceptionHandler.java` | Modified |
+| `application.properties` | Modified |
+| `EventRepository.java` | Modified |
+| `EventService.java` | Modified |
+| `EventServiceImpl.java` | Modified |
+| `EventController.java` | Modified |
+| `TicketValidationRequestDto.java` | Modified |
+| `TicketValidationController.java` | Modified |
+| `TicketsApplication.java` | Modified (timezone) |
+| `TimezoneConfig.java` | **NEW** |
+| `EventStatusService.java` | **NEW** |
+| `EventStatusServiceImpl.java` | **NEW** |
+| `docker-compose.yml` | Modified (TZ, PGTZ) |
+| `SecurityConfig.java` | Modified (removed @Profile) |
+
+### Frontend Files
+| File | Change Type |
+|------|-------------|
+| `domain.ts` | Modified |
+| `api.ts` | Modified |
+| `date-utils.ts` | **NEW** |
+| `dashboard-list-tickets.tsx` | Modified |
+| `ticket-card.tsx` | Modified |
+| `dashboard-view-ticket-page.tsx` | Modified |
+| `switch.tsx` | Modified |
+| `dashboard-list-events-page.tsx` | Modified |
+| `dashboard-manage-event-page.tsx` | Modified |
+| `event-hero.tsx` | Modified |
+| `event-card.tsx` | Modified |
+| `published-event-card.tsx` | Modified |
+| `tsconfig.json` | **NEW** |
+
+### Configuration Files
+| File | Change Type |
+|------|-------------|
+| `.gitignore` | **NEW** |
+| `docker-compose.yml` | Modified |
+| `application.properties` | Modified |
+
+### Deleted Files
+| File | Reason |
+|------|--------|
+| `DevSecurityConfig.java` | Dev profile cleanup |
+| `DevDataInitializer.java` | Dev profile cleanup |
+| `application-dev.properties` | Dev profile cleanup |
+
+### Database Changes
+| Table | Change |
+|-------|--------|
+| `tickets` | Updated `tickets_status_check` constraint |
+| `ticket_validations` | Updated `ticket_validations_status_check` constraint |
 
 ---
 
@@ -921,3 +996,704 @@ The `CANCELLED` status is defined in both backend and frontend, with UI styling 
 4. Frontend: Add "Cancel Ticket" button on ticket detail page
 5. Frontend: Add confirmation dialog
 6. Frontend: Handle success/error states
+
+---
+
+## 13. Automatic Event Completion Feature
+
+### Overview
+Implemented automatic status transition for events: when an event's end date passes, its status automatically changes from `PUBLISHED` to `COMPLETED`. This eliminates the need for organizers to manually mark events as completed.
+
+### Problem
+Previously, events remained in `PUBLISHED` status indefinitely even after they ended. The organizer's "Test" event with a past end date was still showing as "Published" instead of "Completed".
+
+### Solution
+Created a new service that runs as a scheduled task to automatically complete ended events.
+
+### Backend Changes
+
+#### `EventStatusService.java` (NEW)
+Interface for managing automatic event status transitions:
+```java
+public interface EventStatusService {
+  /**
+   * Automatically marks PUBLISHED events as COMPLETED when their event_end date has passed.
+   * @return the number of events that were marked as completed
+   */
+  int completeEndedEvents();
+}
+```
+
+#### `EventStatusServiceImpl.java` (NEW)
+Implementation that uses the repository to bulk-update ended events:
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class EventStatusServiceImpl implements EventStatusService {
+
+  private final EventRepository eventRepository;
+
+  @Override
+  @Transactional
+  public int completeEndedEvents() {
+    LocalDateTime now = LocalDateTime.now();
+    log.debug("Checking for PUBLISHED events that have ended (event_end < {})", now);
+    
+    int completedCount = eventRepository.completeEndedEvents(
+        EventStatusEnum.COMPLETED,
+        EventStatusEnum.PUBLISHED,
+        now
+    );
+    
+    if (completedCount > 0) {
+      log.info("Automatically completed {} events that have ended", completedCount);
+    }
+    
+    return completedCount;
+  }
+}
+```
+
+#### `EventRepository.java` (UPDATED)
+Added new `@Modifying` query for bulk event completion:
+```java
+/**
+ * Automatically marks PUBLISHED events as COMPLETED when their event_end date has passed.
+ * Only affects events with status = PUBLISHED and event_end < now.
+ */
+@Modifying
+@Query("UPDATE Event e SET e.status = :newStatus, e.updatedAt = :now " +
+       "WHERE e.status = :currentStatus AND e.end < :now AND e.end IS NOT NULL")
+int completeEndedEvents(
+    @Param("newStatus") EventStatusEnum newStatus,
+    @Param("currentStatus") EventStatusEnum currentStatus,
+    @Param("now") LocalDateTime now
+);
+```
+
+#### `ScheduledTasksConfig.java` (UPDATED)
+Added new scheduled task for event completion:
+```java
+@Configuration
+@EnableScheduling
+@RequiredArgsConstructor
+@Slf4j
+public class ScheduledTasksConfig {
+
+  private final TicketExpirationService ticketExpirationService;
+  private final EventStatusService eventStatusService;  // NEW
+
+  @Scheduled(fixedRate = 3600000, initialDelay = 10000) // Every hour
+  public void expireTicketsTask() {
+    // ... existing ticket expiration logic
+  }
+
+  @Scheduled(fixedRate = 3600000, initialDelay = 10000) // Every hour, 10 seconds after startup
+  public void completeEndedEventsTask() {  // NEW
+    log.debug("Running scheduled event completion task...");
+    try {
+      eventStatusService.completeEndedEvents();
+    } catch (Exception e) {
+      log.error("Error during scheduled event completion", e);
+    }
+  }
+}
+```
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AUTOMATIC EVENT COMPLETION FLOW                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. Scheduled Task Runs          2. Query Checks                            │
+│     (Every hour +                   SELECT events WHERE                     │
+│      10 sec after startup)          status = 'PUBLISHED' AND                │
+│              ↓                       event_end < NOW()                      │
+│                                                                              │
+│  3. Bulk Update                  4. Result                                  │
+│     UPDATE events                   - Events marked COMPLETED               │
+│     SET status = 'COMPLETED'        - updatedAt timestamp set               │
+│     WHERE ...                       - Log shows count of updates            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Event Lifecycle Flow (Updated)
+
+```
+                    ┌─────────────┐
+   Create Event  →  │   DRAFT     │
+                    └──────┬──────┘
+                           │ Publish
+                           ↓
+                    ┌─────────────┐
+                    │  PUBLISHED  │  ←─── Tickets can be purchased
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+           ↓               ↓               ↓
+   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+   │  CANCELLED  │  │  COMPLETED  │  │  COMPLETED  │
+   │  (manual)   │  │  (manual)   │  │(AUTOMATIC)  │
+   └─────────────┘  └─────────────┘  └─────────────┘
+                                           ↑
+                                    Scheduled task
+                                    when event_end
+                                    has passed
+```
+
+### Scheduling Details
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `fixedRate` | 3600000ms (1 hour) | How often the task runs |
+| `initialDelay` | 10000ms (10 seconds) | Delay after app startup before first run |
+
+### Files Created/Modified
+
+| File | Type | Description |
+|------|------|-------------|
+| `EventStatusService.java` | **NEW** | Interface for event status management |
+| `EventStatusServiceImpl.java` | **NEW** | Implementation with completion logic |
+| `EventRepository.java` | Modified | Added `completeEndedEvents()` query |
+| `ScheduledTasksConfig.java` | Modified | Added `completeEndedEventsTask()` |
+
+---
+
+## 14. PostgreSQL Timezone Configuration
+
+### Overview
+Configured PostgreSQL container to use `Asia/Kolkata` timezone to match the JVM timezone for consistent wall clock time handling.
+
+### Problem
+While the JVM was configured to use `Asia/Kolkata` timezone (Section 11), PostgreSQL was still using UTC. This could cause inconsistencies when:
+- Comparing timestamps between application and database
+- PostgreSQL functions using `NOW()` or `CURRENT_TIMESTAMP`
+- Viewing timestamps directly in database tools
+
+### Solution
+Added timezone environment variables to `docker-compose.yml`:
+
+```yaml
+services:
+  db:
+    image: postgres:latest
+    ports:
+      - "5433:5432"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: changemeinprod!
+      TZ: Asia/Kolkata        # NEW - System timezone
+      PGTZ: Asia/Kolkata      # NEW - PostgreSQL timezone
+```
+
+### Environment Variables Explained
+
+| Variable | Purpose |
+|----------|---------|
+| `TZ` | Sets the system timezone for the container |
+| `PGTZ` | Sets PostgreSQL's default timezone for timestamp operations |
+
+### Result
+- `NOW()` in PostgreSQL returns time in `Asia/Kolkata`
+- Timestamps display correctly in Adminer (database UI)
+- Full consistency between JVM and database time
+
+### Important Note
+**After making this change, restart the PostgreSQL container:**
+```powershell
+cd backend
+docker-compose down
+docker-compose up -d
+```
+
+---
+
+## 15. Dev Profile Cleanup
+
+### Overview
+Removed all development profile configurations to simplify the codebase and use only production-ready configurations.
+
+### Files Deleted
+
+| File | Purpose (before deletion) |
+|------|---------------------------|
+| `DevSecurityConfig.java` | Disabled security in dev profile |
+| `DevDataInitializer.java` | Seeded test data in dev profile |
+| `application-dev.properties` | Dev-specific property overrides |
+
+### Changes Made
+
+#### `SecurityConfig.java` (UPDATED)
+Removed the `@Profile("!dev")` annotation that was added to avoid bean conflicts:
+```java
+// Before
+@Configuration
+@EnableWebSecurity
+@Profile("!dev")  // ← REMOVED
+public class SecurityConfig { ... }
+
+// After
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig { ... }
+```
+
+### Result
+- Single, unified configuration for all environments
+- No risk of accidentally running with disabled security
+- Cleaner codebase without unused dev configurations
+
+### Important Note
+The application now **always** requires proper Keycloak authentication. Make sure:
+1. Keycloak container is running (`docker-compose up -d`)
+2. Keycloak is configured with the correct realm and clients
+3. Valid OAuth2 tokens are used for API requests
+
+---
+
+## 16. Git Repository Configuration
+
+### Overview
+Created a comprehensive `.gitignore` file to exclude build artifacts and IDE files from version control.
+
+### Problem
+After running `mvnw clean install`, the `target/` directory was regenerated with ~10,000+ compiled `.class` files. VS Code's Source Control showed these as untracked files.
+
+### Solution
+Created `.gitignore` at the repository root:
+
+```gitignore
+# Backend - Maven/Java
+backend/target/
+backend/*.jar
+backend/*.war
+backend/*.class
+backend/.mvn/
+backend/*.log
+
+# Frontend - Node.js
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Root level node_modules (if any)
+node_modules/
+package-lock.json
+package.json
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+```
+
+### Categories Excluded
+
+| Category | Patterns | Reason |
+|----------|----------|--------|
+| Maven Build | `backend/target/` | Compiled classes, JAR files |
+| Node.js | `node_modules/`, `dist/` | Dependencies, build output |
+| IDE Files | `.idea/`, `.vscode/`, `*.iml` | Personal IDE settings |
+| OS Files | `.DS_Store`, `Thumbs.db` | System-generated files |
+| Environment | `.env*` | Secrets and local configs |
+| Logs | `*.log`, `logs/` | Runtime log files |
+
+### Git Status After .gitignore
+```powershell
+git status
+# On branch main
+# nothing to commit, working tree clean
+```
+
+The `target/` folder and all its contents are now properly ignored.
+
+---
+
+## 17. PostgreSQL Persistent Volume Configuration
+
+### Overview
+Added persistent volume for PostgreSQL to prevent data loss when containers are restarted or recreated.
+
+### Problem
+When running `docker-compose down` or recreating containers (e.g., after changing PostgreSQL version), all database data was lost because it was stored only inside the container's ephemeral filesystem.
+
+### Solution
+Added a named Docker volume for PostgreSQL data in `docker-compose.yml`:
+
+```yaml
+services:
+  db:
+    image: postgres:latest
+    ports:
+      - "5433:5432"
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: changemeinprod!
+      TZ: Asia/Kolkata
+      PGTZ: Asia/Kolkata
+    volumes:
+      - postgres-data:/var/lib/postgresql  # Persistent volume
+
+volumes:
+  keycloak-data:
+    driver: local
+  postgres-data:
+    driver: local
+```
+
+### PostgreSQL 18+ Compatibility Note
+PostgreSQL 18+ changed its data directory structure. The volume mount path must be `/var/lib/postgresql` (not `/var/lib/postgresql/data`) for compatibility with the latest PostgreSQL images.
+
+### Result
+- Database data persists across container restarts
+- `docker-compose down` no longer deletes data
+- Only `docker-compose down -v` (with `-v` flag) removes volumes
+
+### Important Warning
+⚠️ **Keycloak data is also stored in a volume.** Running `docker-compose down -v` will delete:
+- All PostgreSQL data (events, tickets, users)
+- All Keycloak data (realm config, users, clients)
+
+---
+
+## 18. Scheduled Task Interval Optimization
+
+### Overview
+Reduced the scheduled task interval from 1 hour to 5 minutes for faster automatic status updates.
+
+### Problem
+Events and tickets were taking up to 1 hour to be automatically marked as COMPLETED/EXPIRED after their end time passed.
+
+### Solution
+Updated `ScheduledTasksConfig.java`:
+
+```java
+// Before: Every hour (3600000ms)
+@Scheduled(fixedRate = 3600000, initialDelay = 10000)
+
+// After: Every 5 minutes (300000ms)
+@Scheduled(fixedRate = 300000, initialDelay = 10000)
+```
+
+### Updated Intervals
+
+| Task | Before | After | Purpose |
+|------|--------|-------|---------|
+| `expireTicketsTask()` | 1 hour | 5 minutes | Mark unused tickets as EXPIRED |
+| `completeEndedEventsTask()` | 1 hour | 5 minutes | Mark ended events as COMPLETED |
+
+### Performance Impact
+The impact is **negligible** because:
+- Queries are lightweight (indexed columns, bulk updates)
+- Only touches rows that need updating (usually 0-2)
+- Runs in milliseconds
+
+| Interval | Runs per day | Server Load |
+|----------|--------------|-------------|
+| 1 hour | 24 | Minimal |
+| 5 minutes | 288 | Still minimal |
+
+---
+
+## 19. Frontend Expired Ticket Display Fix
+
+### Overview
+Fixed an issue where tickets for ended events still showed "Active" status in the attendee dashboard instead of "Expired".
+
+### Problem
+When a ticket's event had ended but the backend scheduled task hadn't run yet to update the ticket status from `PURCHASED` to `EXPIRED`, the frontend displayed "Active" badge instead of "Expired".
+
+### Solution
+Updated `ticket-card.tsx` to check the event end date on the frontend and display "Expired" visually even before the backend updates the status:
+
+```typescript
+export const TicketCard: React.FC<TicketCardProps> = ({ ticket, index = 0 }) => {
+  // Check if event has ended (for visual display purposes)
+  const eventEnd = ticket.eventEnd ? parseWallClockDate(ticket.eventEnd) : null
+  const isEventEnded = eventEnd ? eventEnd < new Date() : false
+  
+  // Determine the display status:
+  // - If ticket is PURCHASED but event has ended, show as "Expired" visually
+  // - Otherwise, use the actual ticket status
+  const displayStatus = (ticket.status === TicketStatus.PURCHASED && isEventEnded) 
+    ? TicketStatus.EXPIRED 
+    : ticket.status
+  
+  const status = statusConfig[displayStatus]
+  const isPast = displayStatus === TicketStatus.USED || 
+                 displayStatus === TicketStatus.EXPIRED || 
+                 displayStatus === TicketStatus.CANCELLED
+  
+  // ... rest of component
+}
+```
+
+### Result
+- Tickets for ended events immediately show "Expired" badge
+- No need to wait for backend scheduled task
+- Better user experience with real-time status display
+
+---
+
+## 20. Future Work / Roadmap
+
+### High Priority 🔴
+
+#### 1. External Events API Integration
+**Goal**: Display external events from third-party APIs alongside platform events.
+
+**Tasks**:
+- Research and select external event APIs (Eventbrite, Ticketmaster, Meetup, etc.)
+- Create `ExternalEventService` to fetch and cache external events
+- Add `ExternalEvent` model/DTO for normalized event data
+- Create API endpoint: `GET /api/v1/events/external`
+- Update frontend Discover page to show mixed results
+- Add "External" badge to distinguish external events
+- Handle deep linking to external ticketing pages
+
+**Technical Considerations**:
+- API rate limiting and caching strategy
+- Data mapping from different API formats
+- Error handling for API unavailability
+
+#### 2. Multi-User Authentication System
+**Goal**: Move beyond 3 hardcoded users (organizer, attendee, staff) to support unlimited user registration.
+
+**Tasks**:
+- Enable Keycloak self-registration
+- Add role management in Keycloak admin
+- Create user profile page (view/edit profile)
+- Add user settings (notification preferences, etc.)
+- Implement email verification flow
+- Add password reset functionality
+- Consider social login (Google, GitHub, etc.)
+
+**Keycloak Configuration Needed**:
+```
+Realm Settings → Login:
+  - User registration: ON
+  - Email as username: Optional
+  - Edit username: OFF
+  - Forgot password: ON
+  - Remember me: ON
+  - Verify email: ON
+```
+
+### Medium Priority 🟡
+
+#### 3. Ticket Cancellation Feature
+**Status**: CANCELLED enum exists, UI styling ready, logic not implemented
+
+**Tasks**:
+- Backend: Add `cancelTicket()` method in `TicketService`
+- Backend: Add `POST /api/v1/tickets/{id}/cancel` endpoint
+- Backend: Add cancellation policy validation (e.g., no cancel 24hrs before event)
+- Frontend: Add "Cancel Ticket" button on ticket detail page
+- Frontend: Add confirmation dialog with policy info
+- Consider: Refund logic integration
+
+#### 4. PDF Ticket Download
+**Goal**: Allow attendees to download tickets as PDF for offline use.
+
+**Tasks**:
+- Add PDF generation library (iText, OpenPDF, or similar)
+- Create PDF template with event details, QR code, attendee info
+- Add download button on ticket view page
+- Consider email delivery of PDF tickets
+
+#### 5. Event Search and Filters
+**Goal**: Enhanced event discovery with search and filtering.
+
+**Tasks**:
+- Add search bar to Discover page
+- Filter by: date range, location/venue, price range, category
+- Sort by: date, popularity, price
+- Add event categories/tags system
+
+### Low Priority 🟢
+
+#### 6. Organizer Analytics Dashboard
+- Event views and ticket sales charts
+- Revenue reports
+- Attendee demographics
+- Popular event times
+
+#### 7. Email Notifications
+- Ticket purchase confirmation
+- Event reminders (24hrs, 1hr before)
+- Event updates/changes
+- Ticket transfer notifications
+
+#### 8. Staff Management
+- Organizer can assign staff to events
+- Staff-specific QR scanning interface
+- Staff activity logs
+
+#### 9. Multi-Timezone Support
+- Store event timezone with event data
+- Convert times for users in different timezones
+- Display timezone info on event pages
+
+#### 10. Payment Integration
+- Stripe/PayPal integration
+- Paid ticket purchases
+- Refund processing
+- Payment history
+
+---
+
+## Known Issues
+
+1. **Duplicate H2 dependency** in `pom.xml` - Causes Maven warning but doesn't affect functionality
+2. **PageImpl serialization warning** - Spring Data warns about unstable JSON structure for paginated responses
+3. **Keycloak data loss on `docker-compose down -v`** - User configuration needs to be re-done after volume deletion
+
+---
+
+## Files Modified Summary (All Sessions)
+
+### Backend Files
+| File | Change Type |
+|------|-------------|
+| `TicketStatusEnum.java` | Modified |
+| `TicketRepository.java` | Modified |
+| `TicketValidationServiceImpl.java` | Modified |
+| `TicketExpirationService.java` | **NEW** |
+| `ScheduledTasksConfig.java` | **NEW** → Modified (5 min interval) |
+| `TicketController.java` | Modified |
+| `SalesPeriodException.java` | **NEW** |
+| `TicketTypeServiceImpl.java` | Modified |
+| `GlobalExceptionHandler.java` | Modified |
+| `application.properties` | Modified |
+| `EventRepository.java` | Modified |
+| `EventService.java` | Modified |
+| `EventServiceImpl.java` | Modified |
+| `EventController.java` | Modified |
+| `TicketValidationRequestDto.java` | Modified |
+| `TicketValidationController.java` | Modified |
+| `TicketsApplication.java` | Modified (timezone) |
+| `TimezoneConfig.java` | **NEW** |
+| `EventStatusService.java` | **NEW** |
+| `EventStatusServiceImpl.java` | **NEW** |
+| `docker-compose.yml` | Modified (TZ, PGTZ, volumes) |
+| `SecurityConfig.java` | Modified (removed @Profile) |
+
+### Frontend Files
+| File | Change Type |
+|------|-------------|
+| `domain.ts` | Modified |
+| `api.ts` | Modified |
+| `date-utils.ts` | **NEW** |
+| `dashboard-list-tickets.tsx` | Modified |
+| `ticket-card.tsx` | Modified (expired display fix) |
+| `dashboard-view-ticket-page.tsx` | Modified |
+| `switch.tsx` | Modified |
+| `dashboard-list-events-page.tsx` | Modified |
+| `dashboard-manage-event-page.tsx` | Modified |
+| `event-hero.tsx` | Modified |
+| `event-card.tsx` | Modified |
+| `published-event-card.tsx` | Modified |
+| `tsconfig.json` | **NEW** |
+
+### Configuration Files
+| File | Change Type |
+|------|-------------|
+| `.gitignore` | **NEW** |
+| `docker-compose.yml` | Modified (volumes, timezone) |
+| `application.properties` | Modified |
+
+### Deleted Files
+| File | Reason |
+|------|--------|
+| `DevSecurityConfig.java` | Dev profile cleanup |
+| `DevDataInitializer.java` | Dev profile cleanup |
+| `application-dev.properties` | Dev profile cleanup |
+
+### Database Changes
+| Table | Change |
+|-------|--------|
+| `tickets` | Updated `tickets_status_check` constraint |
+| `ticket_validations` | Updated `ticket_validations_status_check` constraint |
+
+---
+
+## Current System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          EVENT MANAGEMENT PLATFORM                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                   │
+│  │   Frontend  │────▶│   Backend   │────▶│  PostgreSQL │                   │
+│  │  React/Vite │     │ Spring Boot │     │    :5433    │                   │
+│  │    :5173    │     │    :8080    │     │             │                   │
+│  └─────────────┘     └──────┬──────┘     └─────────────┘                   │
+│                              │                                               │
+│                              │ OAuth2                                        │
+│                              ▼                                               │
+│                       ┌─────────────┐                                       │
+│                       │  Keycloak   │                                       │
+│                       │    :9090    │                                       │
+│                       └─────────────┘                                       │
+│                                                                              │
+│  Scheduled Tasks (Every 5 minutes):                                         │
+│  • expireTicketsTask() - Mark unused tickets as EXPIRED                     │
+│  • completeEndedEventsTask() - Mark ended events as COMPLETED               │
+│                                                                              │
+│  Docker Volumes:                                                             │
+│  • postgres-data - PostgreSQL data persistence                              │
+│  • keycloak-data - Keycloak realm/user persistence                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Reference Commands
+
+```powershell
+# Start all Docker containers
+cd backend
+docker-compose up -d
+
+# Start backend
+cd backend
+.\mvnw.cmd spring-boot:run
+
+# Start frontend
+cd frontend
+npm run dev
+
+# View PostgreSQL logs
+docker logs backend-db-1
+
+# Access database directly
+docker exec -it backend-db-1 psql -U postgres -d postgres
+
+# Manually complete ended events
+docker exec backend-db-1 psql -U postgres -d postgres -c "UPDATE events SET status = 'COMPLETED', updated_at = NOW() WHERE status = 'PUBLISHED' AND event_end < NOW() AND event_end IS NOT NULL;"
+
+# Remove all data (CAUTION!)
+docker-compose down -v
+```
