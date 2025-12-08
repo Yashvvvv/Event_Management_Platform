@@ -1,4 +1,6 @@
-# Role-Based Access Control Fixes
+# VenueSync - Role-Based Access Control Implementation
+
+> Documentation for the RBAC security layer implementation
 
 ## Problem Summary
 The common topbar implementation caused the following issues:

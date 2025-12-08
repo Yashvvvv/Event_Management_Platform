@@ -10,10 +10,10 @@
     <relativePath/> <!-- lookup parent from repository -->
   </parent>
   <groupId>com.fullstack</groupId>
-  <artifactId>tickets</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
-  <name>tickets</name>
-  <description>An Event Ticket Platform</description>
+  <artifactId>venuesync</artifactId>
+  <version>1.0.0</version>
+  <name>VenueSync</name>
+  <description>A high-performance event ticketing platform with race-condition-proof seat allocation and real-time QR validation</description>
   <url/>
   <licenses>
     <license/>

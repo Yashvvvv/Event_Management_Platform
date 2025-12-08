@@ -1,6 +1,6 @@
 # Session Changes Summary - December 2025
 
-This document outlines all the changes, improvements, and implementations made during the development sessions for the Event Management Platform.
+This document outlines all the changes, improvements, and implementations made during the development sessions for VenueSync (formerly Event Management Platform).
 
 ---
 
